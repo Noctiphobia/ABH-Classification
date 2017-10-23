@@ -21,7 +21,7 @@ for (i in 1:length(ABHnoID)) {
     ABHnoID[,i] = addNA(ABHnoID[,i])
   }
 }
-cor2 = cor(apply(ABHnoID,2, as.numeric), use = "pairwise.complete.obs")
+cor2 = cor(apply(ABHnoID,2, as.numeric))
 
 corx = character(0)
 cory = character(0)
