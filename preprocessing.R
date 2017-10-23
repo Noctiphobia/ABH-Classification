@@ -13,7 +13,7 @@ colnames2 = names(cols[cols>1])
 colnames2 = colnames2[-which(colnames2=='phone_no')]
 colnames2 = colnames2[-which(colnames2=='Account__r.Salutation')]
 colnames2 = colnames2[-which(colnames2=='phone_acceptance')]
-ABHnoID = ABHnoID[,colnames2)]
+ABHnoID = ABHnoID[,colnames2]
 #change chars to factors
 for (i in 1:length(ABHnoID)) {
   if (is.character(ABHnoID[,i]))
