@@ -27,7 +27,7 @@ corx = character(0)
 cory = character(0)
 correlation = numeric(0)
 for (i in 1:length(ABHnoID)) {
-  for (j in 1:length(ABHnoID)) {
+  for (j in 1:i) {
     if (i != j) {
       corx[length(corx) + 1] = rownames(cor2)[i]
       cory[length(cory) + 1] = colnames(cor2)[j]
