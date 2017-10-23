@@ -75,3 +75,7 @@ dropped = c("CreatedDate", "created_at", "created_at_date", "Last.call", "Telehu
 ABHnoID = ABHnoID[,!(names(ABHnoID) %in% dropped)]
 names(ABHnoID)
 
+#importance with xgboost
+library(xgboost)
+xgb = xgboost(data=data.matrix(ABHnoID[,-93]), label = data.matrix(as.numeric(ABHnoID[,93]) - 1), objective="multi:softmax", num_class = 4, max_depth = 5, eta = 0.1, nthread = 8, nrounds = 100)
+xgb.plot.importance(xgb.importance(names(ABHnoID[,-93]), xgb))
