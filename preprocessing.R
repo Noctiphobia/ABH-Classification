@@ -4,3 +4,9 @@ names(ABHnoID)[134] = "MpcPaid_c"
 names(ABHnoID)[127] = "y"
 ABHnoID = ABHnoID[,!grepl(".*modified.*", names(ABHnoID), ignore.case = T)]
 ABHnoID = ABHnoID[,!grepl(".*token*", names(ABHnoID), ignore.case = T)]
+
+for (i in 1:length(ABHnoID)) {
+  if (is.character(ABHnoID[,i]))
+    ABHnoID[,i] = as.factor(ABHnoID[,i])
+}
+
