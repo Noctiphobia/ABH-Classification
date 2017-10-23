@@ -1,3 +1,4 @@
+
 load('ABH.rda')
 #remove IDs
 ABHnoID = cbind(ABH[,!grepl(".*id.*", names(ABH), ignore.case = T)], ABH$MpcPaid__c)
@@ -14,13 +15,6 @@ colnames2 = colnames2[-which(colnames2=='phone_no')]
 colnames2 = colnames2[-which(colnames2=='Account__r.Salutation')]
 colnames2 = colnames2[-which(colnames2=='phone_acceptance')]
 ABHnoID = ABHnoID[,colnames2]
-#change chars to factors
-for (i in 1:length(ABHnoID)) {
-  if (is.character(ABHnoID[,i])) {
-    ABHnoID[,i] = as.factor(ABHnoID[,i])
-    ABHnoID[,i] = addNA(ABHnoID[,i])
-  }
-}
 
 
 ABHnoID$mileage = as.numeric(ABHnoID$mileage)
@@ -49,6 +43,14 @@ ABHnoID$CreatedDate = as.numeric(ABHnoID$CreatedDate)
 ABHnoID$PolicyStartDate__c = as.numeric(ABHnoID$PolicyStartDate__c)
 ABHnoID$LastCall__c = as.numeric(ABHnoID$LastCall__c)
 ABHnoID$SystemModstamp = as.numeric(ABHnoID$SystemModstamp)
+
+#change chars to factors
+for (i in 1:length(ABHnoID)) {
+  if (is.character(ABHnoID[,i])){
+    ABHnoID[,i] = as.factor(ABHnoID[,i])
+    ABHnoID[,i] = addNA(ABHnoID[,i])
+  }
+}
 
 cor2 = cor(apply(ABHnoID,2, as.numeric))
 
