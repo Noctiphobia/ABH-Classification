@@ -21,6 +21,35 @@ for (i in 1:length(ABHnoID)) {
     ABHnoID[,i] = addNA(ABHnoID[,i])
   }
 }
+
+
+ABHnoID$mileage = as.numeric(ABHnoID$mileage)
+ABHnoID$yearly_mileage = as.numeric(ABHnoID$yearly_mileage)
+ABHnoID$car_worth = as.numeric(ABHnoID$car_worth)
+ABHnoID$main_driver_age = as.integer(ABHnoID$main_driver_age)
+ABHnoID$oc_offers_qty = as.integer(ABHnoID$oc_offers_qty)
+ABHnoID$oc_offer_min_val = as.integer(ABHnoID$oc_offer_min_val)
+ABHnoID$ac_offers_qty = as.integer(ABHnoID$ac_offers_qty)
+ABHnoID$ac_offer_min_val = as.integer(ABHnoID$ac_offer_min_val)
+ABHnoID$offer_first_after = as.integer(ABHnoID$offer_first_after)
+ABHnoID$offer_last_after = as.integer(ABHnoID$offer_last_after)
+ABHnoID$contact_requests = as.integer(ABHnoID$contact_requests)
+ABHnoID$TotalCarCollection__c = as.integer(ABHnoID$TotalCarCollection__c)
+
+ABHnoID$registration_date = as.numeric(ABHnoID$registration_date)
+ABHnoID$insurance_start_date = as.numeric(ABHnoID$insurance_start_date)
+ABHnoID$created_at = as.numeric(ABHnoID$created_at)
+ABHnoID$created_at_date = as.numeric(ABHnoID$created_at_date)
+ABHnoID$form_finished_at = as.numeric(ABHnoID$form_finished_at)
+ABHnoID$offer_first_at = as.numeric(ABHnoID$offer_first_at)
+ABHnoID$offer_last_at = as.numeric(ABHnoID$offer_last_at)
+ABHnoID$Account__r.CreatedDate = as.numeric(ABHnoID$Account__r.CreatedDate)
+ABHnoID$Account__r.PersonBirthdate = as.numeric(ABHnoID$Account__r.PersonBirthdate)
+ABHnoID$CreatedDate = as.numeric(ABHnoID$CreatedDate)
+ABHnoID$PolicyStartDate__c = as.numeric(ABHnoID$PolicyStartDate__c)
+ABHnoID$LastCall__c = as.numeric(ABHnoID$LastCall__c)
+ABHnoID$SystemModstamp = as.numeric(ABHnoID$SystemModstamp)
+
 cor2 = cor(apply(ABHnoID,2, as.numeric))
 
 corx = character(0)
