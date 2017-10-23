@@ -1,4 +1,3 @@
-
 load('ABH.rda')
 #remove IDs
 ABHnoID = cbind(ABH[,!grepl(".*id.*", names(ABH), ignore.case = T)], ABH$MpcPaid__c)
@@ -52,6 +51,7 @@ for (i in 1:length(ABHnoID)) {
   }
 }
 
+#drop columns based on correlation
 cor2 = cor(apply(ABHnoID,2, as.numeric))
 
 corx = character(0)
@@ -70,3 +70,8 @@ for (i in 1:length(ABHnoID)) {
 corres = na.omit(data.frame(corx, cory, correlation))
 corresfiltered = corres[corres$correlation > 0.5,]
 corresfiltered = corresfiltered[order(corresfiltered$correlation, decreasing = T),]
+
+dropped = c("CreatedDate", "created_at", "created_at_date", "Last.call", "Telehub", "phone_yes", "Account__r.CreatedDate", "phone_lookup_status", "Sale.success", "TotalCarCollection__c", "etx_model_code")
+ABHnoID = ABHnoID[,!(names(ABHnoID) %in% dropped)]
+names(ABHnoID)
+
