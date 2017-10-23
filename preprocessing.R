@@ -18,6 +18,7 @@ ABHnoID = ABHnoID[,colnames2]
 for (i in 1:length(ABHnoID)) {
   if (is.character(ABHnoID[,i]))
     ABHnoID[,i] = as.factor(ABHnoID[,i])
+    ABHnoID[,i] = addNA(ABHnoID[,i])
 }
 
 
