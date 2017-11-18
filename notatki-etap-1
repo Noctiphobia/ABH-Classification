@@ -1,0 +1,63 @@
+Czyszczenie danych
+1. Dostosowanie danych do tych ze zbioru testowego (usuwanie kolumn nie występujących w zbiorze testowym)
+2. Usuwanie identyfikatorów i tokenów
+3. Konwersje kolumn:
+  - konwersja niektórych kolumn z character na numeric (np. production_year)
+  - konwersja niektórych kolumn na factor i dodanie poziomu NA do danych
+4. Usuwanie kolumn z wariancją bliską zero (cutoff 99)
+5. Imputacja predyktórów ilościowych średnimi (integery również średnimi) - factorów nie trzeba było imputować
+6. Usuwanie predyktorów skorelowanych (>0.8), współliniowych nie trzeba było, bo nic nie wykryło
+7. Zamiana kodów pocztowych na rejon (większe miasta i ogólnie obszary w polsce)
+8. Dla zbioru testowego - konwersja z daty w stringu na numeric
+9. Usunięcie zduplikowanych predyktorów od marki pojazdu, modelu pojazdu, usunięcie etx_model_code
+10. Obniżanie poziomów czynników utm_campaign, utm_content, utm_medium, salutation
+11. Usunięcie predyktorów LastCall, form_finished_at, created_at
+12. Dodanie, zamiast powyższych, dni tygodnia LastCall i created_at
+
+Inżynieria danych
+1. Nowy predyktor ContactDifference == (LastCall) - (form_finished_at)
+2. Nowy predyktor TimeWaiting == (offer_last_after) - (offer_first_after)
+3. Nowy predyktor HurryTime == (PolicyStartDate) - (created_at)
+4. Nowy predyktor FormFillingTime == (form_finished_at) - (created_at)
+5. Nowe predyktory od OC i AC:
+  - ocacqty == oc_offers_qty + ac_offers_qty
+  - ocacminval == oc_offer_min_val + ac_offer_min_val
+  - ocacratio == oc_offers_qty / ac_offers_qty
+
+Modelowanie + Walidacja
+Odnośnie modeli - początkowo testowałem regresję logistyczną, RF i xgBoosta, xgBoost był najlepszy.
+Miarą był prosty 2-fold i obliczenie AUC
+
+Później testowałem różne podejścia do danych dla wybranego algorytmu - XGBoost:
+Ocenianie modeli XGBoost dla różnie przekształconych danych za pomocą repeated 10-fold crossvalidation:
+Pięć permutacji zbioru treningowego i 10-fold na tym (ziarno oczywiście stałe w funkcji)
+Miarą oceny uśredniony wynik AUC, pomocniczo LIFT5 i LIFT10
+Parametry XGBoost były stałe dla metody oceny (były zawsze bardzo zbliżone optymalnym dla każdych danych)
+Przed kroswalidacją była jeszcze selekcja zmiennych (do liczby zmiennych zadanej przez użytkownika)
+
+Wybrany model 
+Średnie AUC 0.8559 (min 0.848, max 0.868)
+Stary model
+Średnie AUC 0.8424 (min 0.837, max 0.853)
+
+Model predykcyjny trenowany dla 100% danych treningowych, 
+
+z optymalizacją hiperparametrów (4fold dla próbki 40% ze zbioru trenignowego)
+nrounds	max_depth	eta	gamma	colsample_bytree	min_child_weight	subsample
+50	1	0.3	0	0.8	1	1
+
+z selekcją zmiennych (50 zmiennych weszło do modelu - najlepsze wyniki empiryczne)
+
+Najlepsze zmienne:
+went_to_partners
+formFillingTime
+hurryTime
+contactDifference
+phone_lookup_status
+oc_offer_min_val
+oc_offers_qty
+lastcallDOW5
+PolicyStartDate__c
+car_worth
+mileage
+itd...
