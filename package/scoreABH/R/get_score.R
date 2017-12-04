@@ -1,4 +1,7 @@
-xgbmodel = xgboost::xgb.load(model)
+data("rawmodel")
+data("numericmeans")
+data("emptydf")
+xgbmodel = xgboost::xgb.load(rawmodel)
 
 postalCodeToRegion = function (vector){
 	vector = as.character(vector)
@@ -128,7 +131,7 @@ get_score <- function(etx_make_name, etx_model_name, etx_fuel_code, production_y
 			}
 	}
 	md = stats::model.matrix(~., data=newdf)
-	predict(xgbmodel, newdata = md)
+	xgboost:::predict.xgb.Booster(xgbmodel, md)
 }
 
 
