@@ -1,6 +1,4 @@
-library("Matrix")
-library("xgboost")
-xgbmodel = xgb.load(model)
+xgbmodel = xgboost::xgb.load(model)
 
 postalCodeToRegion = function (vector){
 	vector = as.character(vector)
@@ -129,7 +127,7 @@ get_score <- function(etx_make_name, etx_model_name, etx_fuel_code, production_y
 					newdf[1,names(parameters)[i]] = ifelse(is.numeric(newdf[,names(parameters)[i]]), as.numeric(parameters[[i]]), parameters[[i]])
 			}
 	}
-	md = model.matrix(~., data=newdf)
+	md = stats::model.matrix(~., data=newdf)
 	predict(xgbmodel, newdata = md)
 }
 
