@@ -114,11 +114,12 @@ get_score <- function(etx_make_name, etx_model_name, etx_fuel_code, production_y
 											step, oc_offer_min_val, ac_offers_qty, b2c_leads_sent, offer_last_at, 
 											offer_first_after, offer_last_after, phone_lookup_status, utm_campaign, utm_content, 
 											utm_medium, utm_source, ...) {
+	parameters = as.list(environment(), all=TRUE)
+	parameters = parameters[-length(parameters)]
 	newdf = emptydf
 	for (i in 1:length(newdf)) {
 		newdf[1,i] = NA
 	}
-	parameters = as.list(match.call())[-1]
 	for (i in 1:length(parameters)) {
 		if (is.na(parameters[[i]]) && names(parameters)[i] %in% names(numericmeans)) 
 			newdf[1,names(parameters)[i]] = numericmeans[names(parameters)[i]]
