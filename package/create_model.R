@@ -376,7 +376,6 @@ xgboostmeasure = function (datax,datay,k=10, rk=5, obj= 'binary:logistic',predic
 }
 
 mdtrain4 = sparse.model.matrix(Sale.success~.,train4, drop.unused.levels = F)
-trainmatrix = as.matrix(mdtrain4)
 trainy = train4$Sale.success
 
 xg4scores = xgboostmeasure(datax=mdtrain4,datay=as.numeric(trainy)-1)

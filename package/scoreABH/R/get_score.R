@@ -126,10 +126,10 @@ get_score <- function(etx_make_name, etx_model_name, etx_fuel_code, production_y
 				if (grepl("postal", names(parameters)[i])) 
 					newdf[1,names(parameters)[i]] = postalCodeToRegion(parameters[[i]])
 				else
-					newdf[1,names(parameters)[i]] = parameters[[i]]
+					newdf[1,names(parameters)[i]] = ifelse(is.numeric(newdf[,names(parameters)[i]]), as.numeric(parameters[[i]]), parameters[[i]])
 			}
 	}
-	md = sparse.model.matrix(~., data=newdf, drop.unused.levels = F)
+	md = model.matrix(~., data=newdf)
 	predict(xgbmodel, newdata = md)
 }
 
