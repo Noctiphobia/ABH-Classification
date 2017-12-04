@@ -10,20 +10,21 @@ library('pROC')
 library(xgboost)
 library(caret)
 library(glmnet)
+library(dummies)
 
-df = read.csv("Model_decyzyjny_zbiór_treningowy.csv", header=TRUE, format="%d-%b-%y %h:%M%S")
+df = read.csv("Model_decyzyjny_zbiór_treningowy.csv", header=TRUE)
 labelindex = which(colnames(df)=='Sale.success')
 train = df[, c(1:69, labelindex)]
 #usuwanie ID
 ids = which(grepl(".*id.*",colnames(train),ignore.case=T))
-calctokenid = which(colnames(train)=='calculation_token')
-ids = c(ids, calctokenid)
+tokenids = which(colnames(train) %in% c('calculation_token', "salesforce_lead"))
+ids = c(ids, tokenids)
 #zamiana integer -> factor
 train2 = train[,-ids]
 train2$etx_fuel_code = as.factor(train2$etx_fuel_code)
 train2$etx_model_code = as.factor(train2$etx_model_code)
 train2$protection_scope = as.factor(train2$protection_scope)
-train2$hild_carriage_frequency = as.factor(train2$child_carriage_frequency)
+train2$child_carriage_frequency = as.factor(train2$child_carriage_frequency)
 train2$used_abroad = as.factor(train2$used_abroad)
 train2$theft_protection_installation = as.factor(train2$theft_protection_installation)
 train2$theft_protection_device_1 = as.factor(train2$theft_protection_device_1)
@@ -374,9 +375,18 @@ xgboostmeasure = function (datax,datay,k=10, rk=5, obj= 'binary:logistic',predic
 	return (retdf)
 }
 
-mdtrain4 = sparse.model.matrix(Sale.success~.,train4)
+mdtrain4 = sparse.model.matrix(Sale.success~.,train4, drop.unused.levels = F)
+trainmatrix = as.matrix(mdtrain4)
 trainy = train4$Sale.success
 
 xg4scores = xgboostmeasure(datax=mdtrain4,datay=as.numeric(trainy)-1)
 
+numericcols = which(sapply(train4,is.numeric))
+numericmeans = sapply(train4[,numericcols], mean)
+save(numericmeans, file="numericmeans.rda")
 
+emptydf = train4[numeric(0),-which(colnames(train4) == "Sale.success")]
+save(emptydf, file="emptydf.rda")
+
+rawmodel = xgb.load("xgboost.model")$raw
+save(rawmodel, file="model.rda")
