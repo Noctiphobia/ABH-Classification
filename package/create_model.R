@@ -10,11 +10,9 @@ library('pROC')
 library(xgboost)
 library(caret)
 library(glmnet)
-library(dummies)
 
 df = read.csv("Model_decyzyjny_zbiór_treningowy.csv", header=TRUE)
-labelindex = which(colnames(df)=='Sale.success')
-train = df[, c(1:69, labelindex)]
+train = df[, c(1:69, which(colnames(df) %in% c('Sale.success', 'Contacted.by.CC')))]
 #usuwanie ID
 ids = which(grepl(".*id.*",colnames(train),ignore.case=T))
 tokenids = which(colnames(train) %in% c('calculation_token', "salesforce_lead"))
@@ -195,7 +193,7 @@ fpr = function(t=0.5,pred,ty){
 
 #funkcja
 drawROC = function(pred,ty,title="ROC"){
-	if (is.factor(ty)){ty = as.integer(ty)} 
+	if (is.factor(ty)){ty = as.integer(ty)}
 	t = seq(0.001,0.999,0.001)
 	ty = ty[!is.na(pred)]
 	pred = pred[!is.na(pred)]
@@ -211,9 +209,9 @@ drawROC = function(pred,ty,title="ROC"){
 }
 
 ROCcoords = function(pred,ty,title="ROC"){
-	if (is.factor(ty)){ty = as.integer(ty)} 
+	if (is.factor(ty)){ty = as.integer(ty)}
 	t = seq(0.0001,0.9999,0.0001)
-	
+
 	dx = sapply(t, function(tt){
 		fpr(t=tt,pred,ty)
 	})
@@ -225,13 +223,13 @@ ROCcoords = function(pred,ty,title="ROC"){
 
 #funkcje do lift
 drawLIFT = function(pred,ty,title="LIFT"){
-	if (is.factor(ty)){ty = as.integer(ty)} 
+	if (is.factor(ty)){ty = as.integer(ty)}
 	t = 1:100
 	sort_pred = order(pred,decreasing=T)
 	n = length(pred)
-	
+
 	dx = 1:100
-	
+
 	dy = sapply(dx, function(x){
 		m = as.integer((n*x)/100)
 		if (m==0){
@@ -241,23 +239,23 @@ drawLIFT = function(pred,ty,title="LIFT"){
 			dct/(x/100)
 		}
 	})
-	
+
 	dx = dx[!is.na(dy)]
 	dy = dy[!is.na(dy)]
-	
+
 	plot(dx,dy,xlim=c(0,100),type="l",col=1,xaxs="i",yaxs="i")
 	title(main=title)
 	abline(1,0,col=2)
 }
 
 getLIFTS = function(pred,ty){
-	if (is.factor(ty)){ty = as.integer(ty)} 
+	if (is.factor(ty)){ty = as.integer(ty)}
 	t = 1:100
 	sort_pred = order(pred,decreasing=T)
 	n = length(pred)
-	
+
 	dx = c(5,10)
-	
+
 	dy = sapply(dx, function(x){
 		m = as.integer((n*x)/100)
 		if (m==0){
@@ -267,18 +265,18 @@ getLIFTS = function(pred,ty){
 			dct/(x/100)
 		}
 	})
-	
+
 	return(data.frame(lift5=dy[1],lift10=dy[2]))
 }
 
 LIFTcoords = function(pred,ty){
-	if (is.factor(ty)){ty = as.integer(ty)} 
+	if (is.factor(ty)){ty = as.integer(ty)}
 	t = 1:100
 	sort_pred = order(pred,decreasing=T)
 	n = length(pred)
-	
+
 	dx = 1:100
-	
+
 	dy = sapply(dx, function(x){
 		m = as.integer((n*x)/100)
 		if (m==0){
@@ -288,7 +286,7 @@ LIFTcoords = function(pred,ty){
 			dct/(x/100)
 		}
 	})
-	
+
 	dx = dx[!is.na(dy)]
 	dy = dy[!is.na(dy)]
 	return (data.frame(dx,dy))
@@ -297,29 +295,29 @@ LIFTcoords = function(pred,ty){
 #hiperparametry
 
 xgboosthiper = function (datax,datay,predictors=40,obj='binary:logistic'){
-	
+
 	n = nrow(datax)
 	trx = datax
 	try = datay
-	
+
 	xgsf = xgb.DMatrix(trx,label=try)
-	
+
 	#selekcja zmiennych ('predictors' most important)
 	xg1=  xgboost(xgsf, nrounds=100, objective = obj,verbose=0)
 	imp = xgb.importance(colnames(trx),xg1)
 	sec = head(imp$Feature,predictors)
 	inds = sapply(sec,function(sc)which(colnames(trx)==sc))
 	ptrx = trx[,inds]
-	
+
 	#optymalizacja hiperparametrow
 	sa = sample(1:nrow(ptrx),n/5,replace=F)
 	optrx = as.matrix(ptrx[sa,])
-	
+
 	xgFitControl = trainControl (method="cv",number = 4) #4fold
 	xgxo = optrx
 	xgyo = as.factor(try[sa])
 	xgModel = train(xgxo,xgyo,method = "xgbTree",trControl = xgFitControl)
-	
+
 	return (xgModel$bestTune)
 }
 
@@ -328,42 +326,42 @@ xgboosthiper = function (datax,datay,predictors=40,obj='binary:logistic'){
 
 xgboostmeasure = function (datax,datay,k=10, rk=5, obj= 'binary:logistic',predictors=40){
 	retdf = data.frame(AUC=rep(0,k),LIFT5=rep(0,k),LIFT10=rep(0,k))
-	set.seed(997)   
+	set.seed(997)
 	tune = list(nrounds=50,max_depth=1,eta=0.3,gamma=0,colsample_bytree=0.8,min_child_weight=1,subsample=0.75)
-	
+
 	xgsf = xgb.DMatrix(datax,label=datay)
-	
+
 	#selekcja zmiennych ('predictors' most important)
 	xg1=  xgboost(xgsf, nrounds=100, objective = obj,verbose=0)
 	imp = xgb.importance(colnames(datax),xg1)
 	sec = head(imp$Feature,predictors)
 	inds = sapply(sec,function(sc)which(colnames(datax)==sc))
-	pdatax = datax[,inds]    
-	
+	pdatax = datax[,inds]
+
 	set.seed(997)
-	
+
 	for (j in 1:rk){
 		sequence = sample(1:nrow(datax),nrow(datax),replace=F)
 		for (i in 1:k){
 			n = nrow(datax)
 			nf = as.integer(nrow(datax)/k)
 			tf = ((i-1)*nf+1):(i*nf) #indeksy zb. testowego
-			
+
 			trx = pdatax[sequence[-tf],]
 			try = datay[sequence[-tf]]
 			tsx = pdatax[sequence[tf],]
 			tsy = datay[sequence[tf]]
-			
-			
+
+
 			#trenowanie modelu
 			rtrx = xgb.DMatrix(trx,label=try)
-			model =  xgboost(params= tune, data = rtrx, nrounds=tune$nrounds, 
+			model =  xgboost(params= tune, data = rtrx, nrounds=tune$nrounds,
 											 objective = obj,verbose=0)
-			
+
 			#predykcja
 			rtsx = xgb.DMatrix(tsx)
 			predy = predict(model,rtsx,type="response")
-			
+
 			rauc = pROC::auc(tsy,predy)
 			retdf[i,1] = rauc
 			lifts = getLIFTS(predy,tsy)
@@ -375,17 +373,25 @@ xgboostmeasure = function (datax,datay,k=10, rk=5, obj= 'binary:logistic',predic
 	return (retdf)
 }
 
-mdtrain4 = sparse.model.matrix(Sale.success~.,train4, drop.unused.levels = F)
-trainy = train4$Sale.success
+train_contacted = train4[train4$Contacted.by.CC == 1, -which(colnames(train4) == 'Contacted.by.CC')]
+train_not_contacted = train4[train4$Contacted.by.CC == 0, -which(colnames(train4) == 'Contacted.by.CC')]
 
-xg4scores = xgboostmeasure(datax=mdtrain4,datay=as.numeric(trainy)-1)
+sparse_contacted = sparse.model.matrix(Sale.success~.,train_contacted, drop.unused.levels = F)
+sparse_not_contacted = sparse.model.matrix(Sale.success~.,train_not_contacted, drop.unused.levels = F)
+contacted_y = train_contacted$Sale.success
+not_contacted_y = train_not_contacted$Sale.success
+
+xgscores_contacted = xgboostmeasure(datax=sparse_contacted,datay=as.numeric(contacted_y)-1)
+rawmodel_contacted = xgb.load("xgboost.model")$raw
+save(rawmodel_contacted, file="rawmodel_contacted.rda")
+xgscores_not_contacted = xgboostmeasure(datax=sparse_not_contacted,datay=as.numeric(not_contacted_y)-1)
+rawmodel_not_contacted = xgb.load("xgboost.model")$raw
+save(rawmodel_not_contacted, file="rawmodel_not_contacted.rda")
 
 numericcols = which(sapply(train4,is.numeric))
 numericmeans = sapply(train4[,numericcols], mean)
 save(numericmeans, file="numericmeans.rda")
 
-emptydf = train4[numeric(0),-which(colnames(train4) == "Sale.success")]
+emptydf = train_contacted[numeric(0),-which(colnames(train4) == "Sale.success")]
 save(emptydf, file="emptydf.rda")
 
-rawmodel = xgb.load("xgboost.model")$raw
-save(rawmodel, file="model.rda")

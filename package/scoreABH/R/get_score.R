@@ -1,7 +1,9 @@
-data("rawmodel")
+data("rawmodel_contacted")
+data("rawmodel_not_contacted")
 data("numericmeans")
 data("emptydf")
-xgbmodel = xgboost::xgb.load(rawmodel)
+model_contacted = xgboost::xgb.load(rawmodel_contacted)
+model_not_contacted = xgboost::xgb.load(rawmodel_not_contacted)
 
 postalCodeToRegion = function (vector){
 	vector = as.character(vector)
@@ -105,14 +107,14 @@ postalCodeToRegion = function (vector){
 #'
 #' @return numeric
 #' @export
-get_score <- function(etx_make_name, etx_model_name, etx_fuel_code, production_year, etx_model_code, 
-											protection_scope, kind, use_frequency, child_carriage_frequency, mileage, 
-											yearly_mileage, used_abroad, night_parking_place, night_parking_place_postal_code, day_parking_place, 
-											day_parking_place_postal_code, theft_protection_installation, theft_protection_device_1, theft_protection_device_2, origin, 
-											buy_year, registration_date, car_worth, main_driver_postal_code, main_driver_age, 
-											main_driver_gender, insurance_start_date, phone_exists, phone_yes, phone_no, 
-											step, oc_offer_min_val, ac_offers_qty, b2c_leads_sent, offer_last_at, 
-											offer_first_after, offer_last_after, phone_lookup_status, utm_campaign, utm_content, 
+get_score <- function(etx_make_name, etx_model_name, etx_fuel_code, production_year, etx_model_code,
+											protection_scope, kind, use_frequency, child_carriage_frequency, mileage,
+											yearly_mileage, used_abroad, night_parking_place, night_parking_place_postal_code, day_parking_place,
+											day_parking_place_postal_code, theft_protection_installation, theft_protection_device_1, theft_protection_device_2, origin,
+											buy_year, registration_date, car_worth, main_driver_postal_code, main_driver_age,
+											main_driver_gender, insurance_start_date, phone_exists, phone_yes, phone_no,
+											step, oc_offer_min_val, ac_offers_qty, b2c_leads_sent, offer_last_at,
+											offer_first_after, offer_last_after, phone_lookup_status, utm_campaign, utm_content,
 											utm_medium, utm_source, ...) {
 	parameters = as.list(environment(), all=TRUE)
 	parameters = parameters[-length(parameters)]
@@ -121,18 +123,22 @@ get_score <- function(etx_make_name, etx_model_name, etx_fuel_code, production_y
 		newdf[1,i] = NA
 	}
 	for (i in 1:length(parameters)) {
-		if (is.na(parameters[[i]]) && names(parameters)[i] %in% names(numericmeans)) 
+		if (is.na(parameters[[i]]) && names(parameters)[i] %in% names(numericmeans))
 			newdf[1,names(parameters)[i]] = numericmeans[names(parameters)[i]]
-		else 
+		else
 			if (names(parameters)[i] %in% colnames(newdf)) {
-				if (grepl("postal", names(parameters)[i])) 
+				if (grepl("postal", names(parameters)[i]))
 					newdf[1,names(parameters)[i]] = postalCodeToRegion(parameters[[i]])
 				else
 					newdf[1,names(parameters)[i]] = ifelse(is.numeric(newdf[,names(parameters)[i]]), as.numeric(parameters[[i]]), parameters[[i]])
 			}
 	}
 	md = stats::model.matrix(~., data=newdf)
-	xgboost:::predict.xgb.Booster(xgbmodel, md)
+	score_contacted = xgboost:::predict.xgb.Booster(model_contacted, md)
+	score_not_contacted = xgboost:::predict.xgb.Booster(model_not_contacted, md)
+	result = score_contacted - score_not_contacted
+	multiplier = 1 # TODO: multiplier zalezny od potencjalnych zarobkow
+	result * multiplier
 }
 
 
