@@ -252,11 +252,11 @@ save(rawmodel_not_contacted, file="./package/scoreABH/data/rawmodel_not_contacte
 #zapis imputacji
 numericcols = which(sapply(train4,is.numeric))
 numericmeans = sapply(train4[,numericcols], mean)
-save(numericmeans, file="numericmeans.rda")
+save(numericmeans, file="./package/scoreABH/data/numericmeans.rda")
 
 #schema:
 emptydf = train_contacted[numeric(0),-which(colnames(train_contacted)=='Sale.success')]
-save(emptydf, file="emptydf.rda")
+save(emptydf, file="./package/scoreABH/data/emptydf.rda")
 
 #wybrane predyktory
 save(features_contacted, file="./package/scoreABH/data/features_contacted.rda")
