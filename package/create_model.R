@@ -11,8 +11,10 @@ library(xgboost)
 library(caret)
 library(glmnet)
 
-df = read.csv("Model_decyzyjny_zbiór_treningowy.csv", header=TRUE)
+#zbior treningowy (ten co link do niego wygasl) zamieniony na csv-ke
+df = read.csv("data.csv", sep=',', header=TRUE)
 train = df[, c(1:69, which(colnames(df) %in% c('Sale.success', 'Contacted.by.CC')))]
+#train$Sale.success = labels
 #usuwanie ID
 ids = which(grepl(".*id.*",colnames(train),ignore.case=T))
 tokenids = which(colnames(train) %in% c('calculation_token', "salesforce_lead"))
@@ -31,7 +33,7 @@ train2$is_damaged = as.factor(train2$is_damaged)
 train2$leasing = as.factor(train2$leasing)
 train2$calc_complete = as.factor(train2$calc_complete)
 train2$calc_finished = as.factor(train2$calc_finished)
-train2$phone_yes = as.factor(train2$phone_yes)
+train2$phone_yes = as.integer(train2$phone_yes)
 train2$terms_acceptance = as.factor(train2$terms_acceptance)
 train2$step = as.factor(train2$step)
 train2$sent_to_sf = as.factor(train2$sent_to_sf)
@@ -53,13 +55,16 @@ train2$offer_first_at = get_timestamp_datetime(train2$offer_first_at)
 train2$offer_last_at = get_timestamp_datetime(train2$offer_last_at)
 train2 = train2[,-which(colnames(train2) == "created_at_date")]
 
+#zamiana character->factor
 #dodanie poziomu NA do factorow
 for (i in 1:length(train2)) {
-	if (is.factor(train2[,i])){
-		train2[,i] = addNA(train2[,i])
-	}
+  if (is.character(train2[,i])){
+    train2[,i] = as.factor(train2[,i])
+  }
+  if (is.factor(train2[,i])){
+    train2[,i] = addNA(train2[,i])
+  }
 }
-
 
 #usuwanie predyktorow z wariancja bliska 0
 nzv = nearZeroVar(train2,freqCut=99) #bardzo duży cutoff - 99/1 (by nie obcinać zbyt dużo)
@@ -72,9 +77,7 @@ for (numericpred in numericpreds){
 	train3[which(is.na(train3[,numericpred])),numericpred] = as.integer(mean(na.omit(train3[,numericpred])))
 }
 #korelacje
-numerics = which(sapply(train3,class)%in%c('numeric','integer'))
-cr = cor(train3[,numerics])
-correlated = findCorrelation(cr,cutoff= 0.8,names=TRUE)
+correlated = c("phone_yes","phone_no","phone_acceptance")
 traininds = sapply(correlated,function(cc)which(colnames(train3)==cc))
 train4 = train3[,-traininds]
 
@@ -178,220 +181,83 @@ train4$night_parking_place_postal_code = postalCodeToRegion (train4$night_parkin
 train4$day_parking_place_postal_code = postalCodeToRegion (train4$day_parking_place_postal_code)
 train4$main_driver_postal_code = postalCodeToRegion (train4$main_driver_postal_code)
 
-#lib
-#funkcje do rysowania ROC
+##
+##INZYNIERIA CECH
+##
 
-tpr = function(t=0.5,pred,ty){
-	predh = as.integer(pred>t)
-	sum(predh[which(ty==1)])/sum(ty)
-}
+#na podstawie nowych danych, tylko te cechy mozna wprowadzic:
+train4$timeWaiting = (train4$offer_last_after)-(train4$offer_first_after)
+train4$formFillingTime = (train4$form_finished_at) - (train4$created_at)
+colnames(train_contacted)
 
-fpr = function(t=0.5,pred,ty){
-	predh = as.integer(pred>t)
-	sum(predh[-which(ty==1)])/(length(ty)-sum(ty))
-}
+#usuniete przez nearzerovariance:
+train4$ac_offer_min_val = train2$ac_offer_min_val
+train4$ac_offer_min_val[is.na(train4$ac_offer_min_val)] = 0
 
-#funkcja
-drawROC = function(pred,ty,title="ROC"){
-	if (is.factor(ty)){ty = as.integer(ty)}
-	t = seq(0.001,0.999,0.001)
-	ty = ty[!is.na(pred)]
-	pred = pred[!is.na(pred)]
-	dx = sapply(t, function(tt){
-		fpr(t=tt,pred,ty)
-	})
-	dy = sapply(t, function(tt){
-		tpr(t=tt,pred,ty)
-	})
-	plot(dx,dy,xlim=c(0,1),ylim=c(0,1),type="l",col=1,xaxs="i",yaxs="i")
-	title(main=title)
-	abline(0,1,col=2)
-}
+train4$ocacqty = train4$oc_offers_qty + train4$ac_offers_qty
+train4$ocacminval = train4$oc_offer_min_val + train4$ac_offer_min_val
+train4$ocacratio = (train4$oc_offer_min_val) / (train4$ac_offer_min_val)
+train4$ocacratio[train4$ac_offer_min_val==0] = 0
 
-ROCcoords = function(pred,ty,title="ROC"){
-	if (is.factor(ty)){ty = as.integer(ty)}
-	t = seq(0.0001,0.9999,0.0001)
+##
+##MODEL
+##
 
-	dx = sapply(t, function(tt){
-		fpr(t=tt,pred,ty)
-	})
-	dy = sapply(t, function(tt){
-		tpr(t=tt,pred,ty)
-	})
-	return (data.frame(dx,dy))
-}
-
-#funkcje do lift
-drawLIFT = function(pred,ty,title="LIFT"){
-	if (is.factor(ty)){ty = as.integer(ty)}
-	t = 1:100
-	sort_pred = order(pred,decreasing=T)
-	n = length(pred)
-
-	dx = 1:100
-
-	dy = sapply(dx, function(x){
-		m = as.integer((n*x)/100)
-		if (m==0){
-			NA
-		}else{
-			dct = sum(ty[head(sort_pred,m)])/sum(ty)
-			dct/(x/100)
-		}
-	})
-
-	dx = dx[!is.na(dy)]
-	dy = dy[!is.na(dy)]
-
-	plot(dx,dy,xlim=c(0,100),type="l",col=1,xaxs="i",yaxs="i")
-	title(main=title)
-	abline(1,0,col=2)
-}
-
-getLIFTS = function(pred,ty){
-	if (is.factor(ty)){ty = as.integer(ty)}
-	t = 1:100
-	sort_pred = order(pred,decreasing=T)
-	n = length(pred)
-
-	dx = c(5,10)
-
-	dy = sapply(dx, function(x){
-		m = as.integer((n*x)/100)
-		if (m==0){
-			NA
-		}else{
-			dct = sum(ty[head(sort_pred,m)])/sum(ty)
-			dct/(x/100)
-		}
-	})
-
-	return(data.frame(lift5=dy[1],lift10=dy[2]))
-}
-
-LIFTcoords = function(pred,ty){
-	if (is.factor(ty)){ty = as.integer(ty)}
-	t = 1:100
-	sort_pred = order(pred,decreasing=T)
-	n = length(pred)
-
-	dx = 1:100
-
-	dy = sapply(dx, function(x){
-		m = as.integer((n*x)/100)
-		if (m==0){
-			NA
-		}else{
-			dct = sum(ty[head(sort_pred,m)])/sum(ty)
-			dct/(x/100)
-		}
-	})
-
-	dx = dx[!is.na(dy)]
-	dy = dy[!is.na(dy)]
-	return (data.frame(dx,dy))
-}
-
-#hiperparametry
-
-xgboosthiper = function (datax,datay,predictors=40,obj='binary:logistic'){
-
-	n = nrow(datax)
-	trx = datax
-	try = datay
-
-	xgsf = xgb.DMatrix(trx,label=try)
-
-	#selekcja zmiennych ('predictors' most important)
-	xg1=  xgboost(xgsf, nrounds=100, objective = obj,verbose=0)
-	imp = xgb.importance(colnames(trx),xg1)
-	sec = head(imp$Feature,predictors)
-	inds = sapply(sec,function(sc)which(colnames(trx)==sc))
-	ptrx = trx[,inds]
-
-	#optymalizacja hiperparametrow
-	sa = sample(1:nrow(ptrx),n/5,replace=F)
-	optrx = as.matrix(ptrx[sa,])
-
-	xgFitControl = trainControl (method="cv",number = 4) #4fold
-	xgxo = optrx
-	xgyo = as.factor(try[sa])
-	xgModel = train(xgxo,xgyo,method = "xgbTree",trControl = xgFitControl)
-
-	return (xgModel$bestTune)
-}
-
-#kombajn działający dla fold, dokonujący selekcji zmiennych na każdym foldzie i optymalizujący hiperparametry
-#zwraca uśrednione AUC, LIFT5 i LIFT10
-
-xgboostmeasure = function (datax,datay,k=10, rk=5, obj= 'binary:logistic',predictors=40){
-	retdf = data.frame(AUC=rep(0,k),LIFT5=rep(0,k),LIFT10=rep(0,k))
-	set.seed(997)
-	tune = list(nrounds=50,max_depth=1,eta=0.3,gamma=0,colsample_bytree=0.8,min_child_weight=1,subsample=0.75)
-
-	xgsf = xgb.DMatrix(datax,label=datay)
-
-	#selekcja zmiennych ('predictors' most important)
-	xg1=  xgboost(xgsf, nrounds=100, objective = obj,verbose=0)
-	imp = xgb.importance(colnames(datax),xg1)
-	sec = head(imp$Feature,predictors)
-	inds = sapply(sec,function(sc)which(colnames(datax)==sc))
-	pdatax = datax[,inds]
-
-	set.seed(997)
-
-	for (j in 1:rk){
-		sequence = sample(1:nrow(datax),nrow(datax),replace=F)
-		for (i in 1:k){
-			n = nrow(datax)
-			nf = as.integer(nrow(datax)/k)
-			tf = ((i-1)*nf+1):(i*nf) #indeksy zb. testowego
-
-			trx = pdatax[sequence[-tf],]
-			try = datay[sequence[-tf]]
-			tsx = pdatax[sequence[tf],]
-			tsy = datay[sequence[tf]]
-
-
-			#trenowanie modelu
-			rtrx = xgb.DMatrix(trx,label=try)
-			model =  xgboost(params= tune, data = rtrx, nrounds=tune$nrounds,
-											 objective = obj,verbose=0)
-
-			#predykcja
-			rtsx = xgb.DMatrix(tsx)
-			predy = predict(model,rtsx,type="response")
-
-			rauc = pROC::auc(tsy,predy)
-			retdf[i,1] = rauc
-			lifts = getLIFTS(predy,tsy)
-			retdf[i,2] = lifts$lift5
-			retdf[i,3] = lifts$lift10
-			print(paste0("Arrange nr ",j," Fold nr ",i,", AUC ROC= ",rauc,", LIFT5= ",lifts$lift5,", LIFT10= ",lifts$lift10))
-		}
-	}
-	return (retdf)
-}
-
+#datasety
 train_contacted = train4[train4$Contacted.by.CC == 1, -which(colnames(train4) == 'Contacted.by.CC')]
 train_not_contacted = train4[train4$Contacted.by.CC == 0, -which(colnames(train4) == 'Contacted.by.CC')]
 
 sparse_contacted = sparse.model.matrix(Sale.success~.,train_contacted, drop.unused.levels = F)
 sparse_not_contacted = sparse.model.matrix(Sale.success~.,train_not_contacted, drop.unused.levels = F)
-contacted_y = train_contacted$Sale.success
-not_contacted_y = train_not_contacted$Sale.success
+contacted_y = as.numeric(as.character(train_contacted$Sale.success))
+not_contacted_y = as.numeric(as.character(train_not_contacted$Sale.success))
 
-xgscores_contacted = xgboostmeasure(datax=sparse_contacted,datay=as.numeric(contacted_y)-1)
-rawmodel_contacted = xgb.load("xgboost.model")$raw
-save(rawmodel_contacted, file="rawmodel_contacted.rda")
-xgscores_not_contacted = xgboostmeasure(datax=sparse_not_contacted,datay=as.numeric(not_contacted_y)-1)
-rawmodel_not_contacted = xgb.load("xgboost.model")$raw
-save(rawmodel_not_contacted, file="rawmodel_not_contacted.rda")
+#pierwszy model
+xgtrain_con = xgb.DMatrix(sparse_contacted,label=contacted_y)
+xgtrain_ncon = xgb.DMatrix(sparse_not_contacted,label=not_contacted_y)
+model_con = xgb.train(data=xgtrain_con,nrounds=150,objective="binary:logistic")
+model_ncon = xgb.train(data=xgtrain_ncon,nrounds=150,objective="binary:logistic")
 
+#selekcja zmiennych
+xgi_c = xgb.importance(colnames(xgtrain_con),model_con)
+xgi_n = xgb.importance(colnames(xgtrain_ncon),model=model_ncon)
+
+#head 40 - empirycznie pokazane we wczesniejszym etapie
+features_contacted = head(xgi_c$Feature,40)
+features_not_contacted = head(xgi_n$Feature,40)
+
+#drugi model - na selekcji
+sparse_contacted_final = sparse_contacted[,features_contacted]
+sparse_not_contacted_final= sparse_not_contacted[,features_not_contacted]
+
+xgtrain_con_final = xgb.DMatrix(sparse_contacted_final,label=contacted_y)
+xgtrain_ncon_final = xgb.DMatrix(sparse_not_contacted_final,label=not_contacted_y)
+
+#model:
+model_con = xgb.train(data=xgtrain_con_final,nrounds=150,objective="binary:logistic")
+model_ncon= xgb.train(data=xgtrain_ncon_final,nrounds=150,objective="binary:logistic")
+
+
+##
+##ZAPIS
+##
+
+#zapis modeli
+rawmodel_contacted = model_con$raw
+save(rawmodel_contacted, file="./package/scoreABH/data/rawmodel_contacted.rda")
+
+rawmodel_not_contacted = model_ncon$raw
+save(rawmodel_not_contacted, file="./package/scoreABH/data/rawmodel_not_contacted.rda")
+
+#zapis imputacji
 numericcols = which(sapply(train4,is.numeric))
 numericmeans = sapply(train4[,numericcols], mean)
 save(numericmeans, file="numericmeans.rda")
 
-emptydf = train_contacted[numeric(0),-which(colnames(train4) == "Sale.success")]
+#schema:
+emptydf = train_contacted[numeric(0),-which(colnames(train_contacted)=='Sale.success')]
 save(emptydf, file="emptydf.rda")
 
+#wybrane predyktory
+save(features_contacted, file="./package/scoreABH/data/features_contacted.rda")
+save(features_not_contacted, file="./package/scoreABH/data/features_not_contacted.rda")

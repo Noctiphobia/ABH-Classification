@@ -2,6 +2,9 @@ data("rawmodel_contacted")
 data("rawmodel_not_contacted")
 data("numericmeans")
 data("emptydf")
+data("features_contacted")
+data("features_not_contacted")
+
 model_contacted = xgboost::xgb.load(rawmodel_contacted)
 model_not_contacted = xgboost::xgb.load(rawmodel_not_contacted)
 
@@ -107,35 +110,57 @@ postalCodeToRegion = function (vector){
 #'
 #' @return numeric
 #' @export
-get_score <- function(etx_make_name, etx_model_name, etx_fuel_code, production_year, etx_model_code,
-											protection_scope, kind, use_frequency, child_carriage_frequency, mileage,
-											yearly_mileage, used_abroad, night_parking_place, night_parking_place_postal_code, day_parking_place,
-											day_parking_place_postal_code, theft_protection_installation, theft_protection_device_1, theft_protection_device_2, origin,
-											buy_year, registration_date, car_worth, main_driver_postal_code, main_driver_age,
-											main_driver_gender, insurance_start_date, phone_exists, phone_yes, phone_no,
-											step, oc_offer_min_val, ac_offers_qty, b2c_leads_sent, offer_last_at,
-											offer_first_after, offer_last_after, phone_lookup_status, utm_campaign, utm_content,
-											utm_medium, utm_source, ...) {
-	parameters = as.list(environment(), all=TRUE)
-	parameters = parameters[-length(parameters)]
+get_score <- function(...) {
+	parameters = data.frame(...)
 	newdf = emptydf
+	#
 	for (i in 1:length(newdf)) {
 		newdf[1,i] = NA
 	}
+
+	#wektor nazw atrybutow danych
+	dnames = colnames(parameters)
+	#wektor nazw atrybutow w modelu
+	mnames = colnames(newdf)
+
 	for (i in 1:length(parameters)) {
-		if (is.na(parameters[[i]]) && names(parameters)[i] %in% names(numericmeans))
-			newdf[1,names(parameters)[i]] = numericmeans[names(parameters)[i]]
-		else
-			if (names(parameters)[i] %in% colnames(newdf)) {
-				if (grepl("postal", names(parameters)[i]))
-					newdf[1,names(parameters)[i]] = postalCodeToRegion(parameters[[i]])
-				else
-					newdf[1,names(parameters)[i]] = ifelse(is.numeric(newdf[,names(parameters)[i]]), as.numeric(parameters[[i]]), parameters[[i]])
+		if (!any(dnames[i] == mnames)){
+			next
+		}
+		#indeks w newdf
+		model_index = which(dnames[i]==mnames)
+
+		if (is.na(parameters[,i]) && dnames[i] %in% names(numericmeans)){
+			numeric_index = which(names(numericmeans)==dnames[i])
+			newdf[1,model_index] = numericmeans[numeric_index]
+		}
+		else{
+			if (grepl("postal", dnames[i]))
+				newdf[1,model_index] = postalCodeToRegion(parameters[,i])
+			else{
+				newdf[1,model_index] = ifelse(is.numeric(newdf[,model_index]), as.numeric(parameters[,i]), parameters[,i])
 			}
+		}
 	}
+	#feature engineering
+	newdf$timeWaiting = (newdf$offer_last_after)-(newdf$offer_first_after)
+	newdf$formFillingTime = (newdf$form_finished_at) - (newdf$created_at)
+	#oc/ac
+	newdf$ocacqty = newdf$oc_offers_qty + newdf$ac_offers_qty
+	newdf$ocacminval = newdf$oc_offer_min_val + newdf$ac_offer_min_val
+	newdf$ocacratio = (newdf$oc_offer_min_val) / (newdf$ac_offer_min_val)
+	newdf$ocacratio[newdf$ac_offer_min_val==0] = 0
+
+
 	md = stats::model.matrix(~., data=newdf)
-	score_contacted = xgboost:::predict.xgb.Booster(model_contacted, md)
-	score_not_contacted = xgboost:::predict.xgb.Booster(model_not_contacted, md)
+	md_con = t(md[,features_contacted]) #zamiana na matrix i obrot
+	md_ncon =t(md[,features_not_contacted])
+
+	xg_con = xgb.DMatrix(md_con)
+	xg_ncon = xgb.DMatrix(md_ncon)
+
+	score_contacted = xgboost:::predict.xgb.Booster(model_contacted, xg_con)
+	score_not_contacted = xgboost:::predict.xgb.Booster(model_not_contacted,xg_ncon)
 	result = score_contacted - score_not_contacted
 	multiplier = 1 # TODO: multiplier zalezny od potencjalnych zarobkow
 	result * multiplier
