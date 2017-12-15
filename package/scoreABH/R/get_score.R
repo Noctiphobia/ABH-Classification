@@ -138,11 +138,14 @@ get_score <- function(...) {
 			if (grepl("postal", dnames[i]))
 				newdf[1,model_index] = postalCodeToRegion(parameters[,i])
 			else{
-				newdf[1,model_index] = ifelse(is.numeric(newdf[,model_index]), as.numeric(parameters[,i]), parameters[,i])
+				newdf[1,model_index] = ifelse(is.numeric(newdf[,model_index]), as.numeric(parameters[,i]), as.character(parameters[,i]))
 			}
 		}
 	}
+
 	#feature engineering
+	#!dopisywac nowe features jesli cos nowego dojdzie
+	new_feats = c("timeWaiting","formFillingTime","ocacqty","ocacminval","ocacratio")
 	newdf$timeWaiting = (newdf$offer_last_after)-(newdf$offer_first_after)
 	newdf$formFillingTime = (newdf$form_finished_at) - (newdf$created_at)
 	#oc/ac
@@ -151,19 +154,28 @@ get_score <- function(...) {
 	newdf$ocacratio = (newdf$oc_offer_min_val) / (newdf$ac_offer_min_val)
 	newdf$ocacratio[newdf$ac_offer_min_val==0] = 0
 
+	#sprawdz czy nie brakuje potrzebnych atrybutow w JSON-ie (w tym momencie moze tak byc z offer_last_at itp.)
+	not_delivered =  mnames[which(!(mnames %in% c(dnames,new_feats)))]
+	if (length(not_delivered)>0){
+		stop("Error - request is in wrong format, attributes: [",paste(not_delivered,collapse=", "),"] are missing.")
+	}
 
 	md = stats::model.matrix(~., data=newdf)
-	md_con = t(md[,features_contacted]) #zamiana na matrix i obrot
-	md_ncon =t(md[,features_not_contacted])
+	mc = md[,features_contacted]
+	mn = md[,features_not_contacted]
+	md_con = t(mc) #model.matrix tworzy zwykly wektor kolumnowy, wymagana transpozycja
+	md_ncon =t(mn)
 
-	xg_con = xgb.DMatrix(md_con)
-	xg_ncon = xgb.DMatrix(md_ncon)
+	xg_con = xgboost::xgb.DMatrix(md_con)
+	xg_ncon = xgboost::xgb.DMatrix(md_ncon)
 
 	score_contacted = xgboost:::predict.xgb.Booster(model_contacted, xg_con)
 	score_not_contacted = xgboost:::predict.xgb.Booster(model_not_contacted,xg_ncon)
 	result = score_contacted - score_not_contacted
+	#zabezpieczenie na (ekstremalny) przypadek nieznanych poziomow czynnika
+	if (length(result)>1)
+		result=result[1]
+
 	multiplier = 1 # TODO: multiplier zalezny od potencjalnych zarobkow
 	result * multiplier
 }
-
-
