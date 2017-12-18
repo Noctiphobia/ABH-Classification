@@ -145,14 +145,19 @@ get_score <- function(...) {
 
 	#feature engineering
 	#!dopisywac nowe features jesli cos nowego dojdzie
-	new_feats = c("timeWaiting","formFillingTime","ocacqty","ocacminval","ocacratio")
-	newdf$timeWaiting = (newdf$offer_last_after)-(newdf$offer_first_after)
-	newdf$formFillingTime = (newdf$form_finished_at) - (newdf$created_at)
+	new_feats = c("timeWaiting","formFillingTime",'hurryTime',"ocacqty","ocacminval","ocacratio","createdDoW")
+	newdf$timeWaiting = (parameters$offer_last_after)-(parameters$offer_first_after)
+	newdf$formFillingTime = (parameters$form_finished_at) - (parameters$created_at)
+	#todo imputacja new features
+	#todo uproszczenie kodu (co tu sie dzieje to juz nawet nie wiem)
+	newdf$hurryTime = (parameters$insurance_start_date - parameters$created_at)
+
 	#oc/ac
 	newdf$ocacqty = newdf$oc_offers_qty + newdf$ac_offers_qty
 	newdf$ocacminval = newdf$oc_offer_min_val + newdf$ac_offer_min_val
 	newdf$ocacratio = (newdf$oc_offer_min_val) / (newdf$ac_offer_min_val)
 	newdf$ocacratio[newdf$ac_offer_min_val==0] = 0
+	newdf$createdDoW = as.factor((as.integer(parameters$created_at) + 6)%%7)
 
 	#sprawdz czy nie brakuje potrzebnych atrybutow w JSON-ie (w tym momencie moze tak byc z offer_last_at itp.)
 	not_delivered =  mnames[which(!(mnames %in% c(dnames,new_feats)))]
@@ -171,6 +176,7 @@ get_score <- function(...) {
 
 	score_contacted = xgboost:::predict.xgb.Booster(model_contacted, xg_con)
 	score_not_contacted = xgboost:::predict.xgb.Booster(model_not_contacted,xg_ncon)
+
 	result = score_contacted - score_not_contacted
 	#zabezpieczenie na (ekstremalny) przypadek nieznanych poziomow czynnika
 	if (length(result)>1)
