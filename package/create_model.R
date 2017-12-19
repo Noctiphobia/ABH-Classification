@@ -331,7 +331,7 @@ numericmeans = sapply(train_full[,numericcols], function(x){mean(na.omit(x))})
 save(numericmeans, file="./package/scoreABH/data/numericmeans.rda")
 
 #schema:
-emptydf = train_full[numeric(0),-which(colnames(train_contacted)=='Sale.success')]
+emptydf = train_full[numeric(0),-which(colnames(train_full) %in% c('Contacted.by.CC','Sale.success'))]
 save(emptydf, file="./package/scoreABH/data/emptydf.rda")
 
 #wybrane predyktory

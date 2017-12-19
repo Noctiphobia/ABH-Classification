@@ -113,10 +113,6 @@ postalCodeToRegion = function (vector){
 get_score <- function(...) {
 	parameters = data.frame(...)
 	newdf = emptydf
-	#
-	for (i in 1:length(newdf)) {
-		newdf[1,i] = NA
-	}
 
 	#wektor nazw atrybutow danych
 	dnames = colnames(parameters)
@@ -138,32 +134,37 @@ get_score <- function(...) {
 			if (grepl("postal", dnames[i]))
 				newdf[1,model_index] = postalCodeToRegion(parameters[,i])
 			else{
-				newdf[1,model_index] = ifelse(is.numeric(newdf[,model_index]), as.numeric(parameters[,i]), as.character(parameters[,i]))
+				newdf[1,model_index] = ifelse(is.numeric(newdf[,model_index]), as.numeric(as.character(parameters[,i])), as.character(parameters[,i]))
+			}
+		}
+	}
+	#!dopisywac nowe features jesli cos nowego dojdzie
+	new_feats = c("timeWaiting","formFillingTime",'hurryTime',"ocacqty","ocacminval","ocacratio","createdDoW")
+
+	#imputacja brakujacych w requescie atrybutow
+	not_delivered =  mnames[which(!(mnames %in% c(dnames,new_feats)))]
+	if (length(not_delivered)>0){
+		for (feat in not_delivered){
+			if (is.numeric(newdf[,feat])){
+				numeric_index = which(names(numericmeans)==feat)
+				newdf[1,feat] = numericmeans[numeric_index]
+			} else if (is.factor(newdf[,feat])){
+				newdf[1,feat] = NA #dla kazdego factora jest level NA
 			}
 		}
 	}
 
-	#feature engineering
-	#!dopisywac nowe features jesli cos nowego dojdzie
-	new_feats = c("timeWaiting","formFillingTime",'hurryTime',"ocacqty","ocacminval","ocacratio","createdDoW")
-	newdf$timeWaiting = (parameters$offer_last_after)-(parameters$offer_first_after)
-	newdf$formFillingTime = (parameters$form_finished_at) - (parameters$created_at)
-	#todo imputacja new features
-	#todo uproszczenie kodu (co tu sie dzieje to juz nawet nie wiem)
-	newdf$hurryTime = (parameters$insurance_start_date - parameters$created_at)
-
+	#feature engineering - nie wymaga imputacji z powodu powyzszej petli
+	newdf$timeWaiting = (newdf$offer_last_after)-(newdf$offer_first_after)
+	newdf$formFillingTime = (newdf$form_finished_at) - (newdf$created_at)
+	newdf$hurryTime = (newdf$insurance_start_date - newdf$created_at)
 	#oc/ac
 	newdf$ocacqty = newdf$oc_offers_qty + newdf$ac_offers_qty
 	newdf$ocacminval = newdf$oc_offer_min_val + newdf$ac_offer_min_val
 	newdf$ocacratio = (newdf$oc_offer_min_val) / (newdf$ac_offer_min_val)
 	newdf$ocacratio[newdf$ac_offer_min_val==0] = 0
-	newdf$createdDoW = as.factor((as.integer(parameters$created_at) + 6)%%7)
-
-	#sprawdz czy nie brakuje potrzebnych atrybutow w JSON-ie (w tym momencie moze tak byc z offer_last_at itp.)
-	not_delivered =  mnames[which(!(mnames %in% c(dnames,new_feats)))]
-	if (length(not_delivered)>0){
-		stop("Error - request is in wrong format, attributes: [",paste(not_delivered,collapse=", "),"] are missing.")
-	}
+	#inna obsluga by nie usuwac istniejacego factora
+	newdf[1,"createdDoW"] = as.character((as.integer(newdf$created_at) + 6)%%7)
 
 	md = stats::model.matrix(~., data=newdf)
 	mc = md[,features_contacted]
