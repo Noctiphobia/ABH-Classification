@@ -176,6 +176,9 @@ get_score <- function(...) {
 	if (length(result)>1)
 		result=result[1]
 
-	multiplier = 1 # TODO: multiplier zalezny od potencjalnych zarobkow
+	#dodanie mnoznika (wartosc oczekiwana, niestety nie da sie wyznaczyc faktycznej kwoty ubezpieczenia, wiec lecimy po minimum)
+	multiplier = newdf$oc_offer_min_val[1]
+	if (is.na(multiplier) || length(multiplier) == 0 || multiplier < 100) #ponizej tej kwoty najprawdpodobniej lipne dane
+		multiplier = numericmeans['oc_offer_min_val']
 	result * multiplier
 }
