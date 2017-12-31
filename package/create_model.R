@@ -13,8 +13,7 @@ library(glmnet)
 
 #zbior treningowy (ten co link do niego wygasl) zamieniony na csv-ke
 df = read.csv("data.csv", sep=',', header=TRUE)
-train = df[, c(1:69, which(colnames(df) %in% c('Sale.success', 'Contacted.by.CC')))]
-#train$Sale.success = labels
+train = df[, c(1:71,which(colnames(df) %in% c('Sale.success', 'Contacted.by.CC')))]
 #usuwanie ID
 ids = which(grepl(".*id.*",colnames(train),ignore.case=T))
 tokenids = which(colnames(train) %in% c('calculation_token', "salesforce_lead"))
@@ -40,19 +39,76 @@ train2$sent_to_sf = as.factor(train2$sent_to_sf)
 train2$phone_lookup_status = as.factor(train2$phone_lookup_status)
 train2$Sale.success = as.factor(train2$Sale.success)
 #poprawienie dat
-Sys.setlocale("LC_TIME", "C")
-get_timestamp_datetime = function(x) {
-	as.integer(as.POSIXct(strptime(as.character(x), "%d-%b-%y %H:%M:%S")))
-}
-get_timestamp_date = function(x) {
-	as.integer(as.POSIXct(strptime(as.character(x), "%d-%b-%y")))
-}
-train2$created_at = get_timestamp_datetime(train2$created_at)
-train2$registration_date = get_timestamp_datetime(train2$registration_date)
-train2$insurance_start_date = get_timestamp_date(train2$insurance_start_date)
-train2$form_finished_at = get_timestamp_datetime(train2$form_finished_at)
-train2$offer_first_at = get_timestamp_datetime(train2$offer_first_at)
-train2$offer_last_at = get_timestamp_datetime(train2$offer_last_at)
+d0 <- as.Date(0, origin="1899-12-30", tz='UTC')
+
+train2$created_at = sapply(as.character(train2$created_at), function(rd){
+  if (is.na(rd) | nchar(rd)<5) {NA} else {
+    ssplit = strsplit(rd,' ')[[1]]
+    a = strsplit(ssplit[1],'-')[[1]]
+    aa = as.Date(paste0(which(month.abb==a[2]),'/',a[1],'/',a[3]),'%m/%d/%y')
+    numericdate = as.numeric(aa-d0)
+    b = strsplit(ssplit[2],':')[[1]]
+    dayseconds = 24*60*60
+    numerator = as.numeric(b[1])*3600+as.numeric(b[2])*60+as.numeric(b[3])
+    numericdate + (numerator/dayseconds)
+  }
+})
+
+train2$registration_date = sapply(as.character(train2$registration_date), function(rd){
+  if (nchar(rd)<5) {NA} else {
+    a = strsplit(strsplit(rd,' ')[[1]],'-')[[1]]
+    aa = as.Date(paste0(which(month.abb==a[2]),'/',a[1],'/',a[3]),'%m/%d/%y')
+    as.numeric(aa-d0)
+  }
+})
+
+train2$insurance_start_date = sapply(as.character(train2$insurance_start_date), function(rd){
+  if (nchar(rd)<5) {NA} else {
+    a = strsplit(strsplit(rd,' ')[[1]],'-')[[1]]
+    aa = as.Date(paste0(which(month.abb==a[2]),'/',a[1],'/',a[3]),'%m/%d/%y')
+    as.numeric(aa-d0)
+  }
+})
+
+train2$form_finished_at = sapply(as.character(train2$form_finished_at), function(rd){
+  if (is.na(rd) | nchar(rd)<5) {NA} else {
+    ssplit = strsplit(rd,' ')[[1]]
+    a = strsplit(ssplit[1],'-')[[1]]
+    aa = as.Date(paste0(which(month.abb==a[2]),'/',a[1],'/',a[3]),'%m/%d/%y')
+    numericdate = as.numeric(aa-d0)
+    b = strsplit(ssplit[2],':')[[1]]
+    dayseconds = 24*60*60
+    numerator = as.numeric(b[1])*3600+as.numeric(b[2])*60+as.numeric(b[3])
+    numericdate + (numerator/dayseconds)
+  }
+})
+
+train2$offer_first_at = sapply(as.character(train2$offer_first_at), function(rd){
+  if (is.na(rd) | nchar(rd)<5) {NA} else {
+    ssplit = strsplit(rd,' ')[[1]]
+    a = strsplit(ssplit[1],'-')[[1]]
+    aa = as.Date(paste0(which(month.abb==a[2]),'/',a[1],'/',a[3]),'%m/%d/%y')
+    numericdate = as.numeric(aa-d0)
+    b = strsplit(ssplit[2],':')[[1]]
+    dayseconds = 24*60*60
+    numerator = as.numeric(b[1])*3600+as.numeric(b[2])*60+as.numeric(b[3])
+    numericdate + (numerator/dayseconds)
+  }
+})
+
+train2$offer_last_at = sapply(as.character(train2$offer_last_at), function(rd){
+  if (is.na(rd) | nchar(rd)<5) {NA} else {
+    ssplit = strsplit(rd,' ')[[1]]
+    a = strsplit(ssplit[1],'-')[[1]]
+    aa = as.Date(paste0(which(month.abb==a[2]),'/',a[1],'/',a[3]),'%m/%d/%y')
+    numericdate = as.numeric(aa-d0)
+    b = strsplit(ssplit[2],':')[[1]]
+    dayseconds = 24*60*60
+    numerator = as.numeric(b[1])*3600+as.numeric(b[2])*60+as.numeric(b[3])
+    numericdate + (numerator/dayseconds)
+  }
+})
+
 train2 = train2[,-which(colnames(train2) == "created_at_date")]
 
 #zamiana character->factor
@@ -191,6 +247,9 @@ train4$main_driver_postal_code = postalCodeToRegion (train4$main_driver_postal_c
 #na podstawie nowych danych, tylko te cechy mozna wprowadzic:
 train4$timeWaiting = (train4$offer_last_after)-(train4$offer_first_after)
 train4$formFillingTime = (train4$form_finished_at) - (train4$created_at)
+#imputacja formFillingTime
+train4[is.na(train4$formFillingTime),]$formFillingTime = mean(train4[!is.na(train4$formFillingTime),]$formFillingTime)
+train4$hurryTime = (train4$insurance_start_date - train4$created_at)
 
 #usuniete przez nearzerovariance:
 train4$ac_offer_min_val = train2$ac_offer_min_val
@@ -200,6 +259,22 @@ train4$ocacqty = train4$oc_offers_qty + train4$ac_offers_qty
 train4$ocacminval = train4$oc_offer_min_val + train4$ac_offer_min_val
 train4$ocacratio = (train4$oc_offer_min_val) / (train4$ac_offer_min_val)
 train4$ocacratio[train4$ac_offer_min_val==0] = 0
+
+#day of week created_at
+train4$createdDoW = as.factor((as.integer(train4$created_at) + 6)%%7)
+
+#ramka ktora bedzie podstawa dla emptydf
+train_full = train4
+
+#usuniecie niektorych kolumn z datami z treningu (beda one bardzo szkodliwe dla modelu)
+train4$form_finished_at = NULL
+train4$created_at = NULL
+train4$insurance_start_date = NULL
+train4$offer_last_at = NULL
+train4$offer_first_at = NULL
+
+#czy nie ma NA w modelu?
+any(sapply(train4,function(cc)any(is.na(cc))))
 
 ##
 ##MODEL
@@ -213,7 +288,6 @@ sparse_contacted = sparse.model.matrix(Sale.success~.,train_contacted, drop.unus
 sparse_not_contacted = sparse.model.matrix(Sale.success~.,train_not_contacted, drop.unused.levels = F)
 contacted_y = as.numeric(as.character(train_contacted$Sale.success))
 not_contacted_y = as.numeric(as.character(train_not_contacted$Sale.success))
-
 #pierwszy model
 xgtrain_con = xgb.DMatrix(sparse_contacted,label=contacted_y)
 xgtrain_ncon = xgb.DMatrix(sparse_not_contacted,label=not_contacted_y)
@@ -235,10 +309,13 @@ sparse_not_contacted_final= sparse_not_contacted[,features_not_contacted]
 xgtrain_con_final = xgb.DMatrix(sparse_contacted_final,label=contacted_y)
 xgtrain_ncon_final = xgb.DMatrix(sparse_not_contacted_final,label=not_contacted_y)
 
-#model:
-model_con = xgb.train(data=xgtrain_con_final,nrounds=150,objective="binary:logistic")
-model_ncon= xgb.train(data=xgtrain_ncon_final,nrounds=150,objective="binary:logistic")
+#optymalizacja hiperparametrow
+#przeniesienie z poprzedniego modelu
+besttune = list(nrounds=50,max_depth=1,eta=0.3,gamma=0,colsample_bytree=0.8,min_child_weight=1,subsample=1)
 
+#model:
+model_con = xgb.train(data=xgtrain_con_final,params= besttune,nrounds=50,objective="binary:logistic")
+model_ncon= xgb.train(data=xgtrain_ncon_final,params= besttune,nrounds=50,objective="binary:logistic")
 
 ##
 ##ZAPIS
@@ -252,12 +329,12 @@ rawmodel_not_contacted = model_ncon$raw
 save(rawmodel_not_contacted, file="./package/scoreABH/data/rawmodel_not_contacted.rda")
 
 #zapis imputacji
-numericcols = which(sapply(train4,is.numeric))
-numericmeans = sapply(train4[,numericcols], mean)
+numericcols = which(sapply(train_full,is.numeric))
+numericmeans = sapply(train_full[,numericcols], function(x){mean(na.omit(x))})
 save(numericmeans, file="./package/scoreABH/data/numericmeans.rda")
 
 #schema:
-emptydf = train_contacted[numeric(0),-which(colnames(train_contacted)=='Sale.success')]
+emptydf = train_full[numeric(0),-which(colnames(train_full) %in% c('Contacted.by.CC','Sale.success'))]
 save(emptydf, file="./package/scoreABH/data/emptydf.rda")
 
 #wybrane predyktory
