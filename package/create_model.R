@@ -69,12 +69,15 @@ for (i in 1:length(train2)) {
 #usuwanie predyktorow z wariancja bliska 0
 nzv = nearZeroVar(train2,freqCut=99) #bardzo duży cutoff - 99/1 (by nie obcinać zbyt dużo)
 train3 = train2[,-nzv]
+
 #imputacja
 numericpreds = which(sapply(train3,class)=='integer')
 has_NA = sapply(numericpreds,function(npred)any(is.na(train3[,npred])))
 numericpreds = numericpreds[has_NA]
-for (numericpred in numericpreds){
+for (numericpred in names(numericpreds)){
 	train3[which(is.na(train3[,numericpred])),numericpred] = as.integer(mean(na.omit(train3[,numericpred])))
+	is_na_col = is.na(train3[,numericpred])
+	train3[, paste0("is_na_", numericpred)] = is_na_col
 }
 #korelacje
 correlated = c("phone_yes","phone_no","phone_acceptance")
@@ -188,7 +191,6 @@ train4$main_driver_postal_code = postalCodeToRegion (train4$main_driver_postal_c
 #na podstawie nowych danych, tylko te cechy mozna wprowadzic:
 train4$timeWaiting = (train4$offer_last_after)-(train4$offer_first_after)
 train4$formFillingTime = (train4$form_finished_at) - (train4$created_at)
-colnames(train_contacted)
 
 #usuniete przez nearzerovariance:
 train4$ac_offer_min_val = train2$ac_offer_min_val
