@@ -226,7 +226,7 @@ modelxg = xgb.train(data=xgtrain,nrounds=100,objective="binary:logistic")
 xgi = xgb.importance(colnames(xgtrain),modelxg)
 head(xgi,20)
 #feature selection
-feats = head(xgi$Feature,20)
+feats = head(xgi$Feature,50)
 
 md2 = md[,feats]
   dim(md2)
@@ -250,7 +250,7 @@ unique(x)
 ?cutree
 dim(md2)
 colnames(md2)
-hist(sapply(unique(x), function(xx){mean(md2[x==xx,10])}))
+hist(sapply(unique(x), function(xx){mean(md2[x==xx,3])}))
 plot(md2[,16],md2[,20],col=x)
 mean(md2[,13])
 mean(group2[,13])
