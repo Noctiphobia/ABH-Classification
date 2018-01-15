@@ -1,72 +1,145 @@
-#dziala dla ABH
-load("./ABH-Classification/ABH.rda")
-preds = strsplit(
-  "LastCall__c	calculation_id	calculation_token	etx_make_name	etx_model_name	etx_fuel_code	production_year	etx_model_code	vehicle_id	protection_scope	kind	usage_type	use_frequency	child_carriage_frequency	mileage	yearly_mileage	used_abroad	night_parking_place	night_parking_place_postal_code	day_parking_place	day_parking_place_postal_code	theft_protection_installation	theft_protection_device_1	theft_protection_device_2	origin	buy_year	registration_date	is_damaged	leasing	car_worth	main_driver_postal_code	main_driver_age	main_driver_gender	insurance_start_date	phone_exists	calc_complete	calc_incomplete	calc_finished	phone_yes	phone_no	calculation_type	terms_acceptance	phone_acceptance	phone_accepted	step	created_at	created_at_date	affiliation_id	user_id	salesforce_lead	sent_to_sf	sf_r_purchasing	calculation_state	oc_offers_qty	oc_offer_min_val	ac_offers_qty	ac_offer_min_val	b2c_leads_sent	form_finished_at	offer_first_at	offer_last_at	offer_first_after	offer_last_after	phone_lookup_status	utm_campaign	utm_content	utm_medium	utm_source	pkb_transform_ver	went_to_partners	contact_requests	Acc_Agreement_call__c	Acc_Agreement_marketing__c	Acc_Agreement_newsletter__c	Acc_Birthdate__c	Acc_PhoneHLRStatus__c	Account__r.AccountSource	Account__r.AgreementCall__pc	Account__r.AgreementMarketing__pc	Account__r.AgreementNewsletter__pc	Account__r.BillingCity	Account__r.BillingPostalCode	Account__r.CreatedById	Account__r.CreatedDate	Account__r.Gender__pc	Account__r.Id	Account__r.IsDeleted	Account__r.IsPersonAccount	Account__r.LegacyID__c	Account__r.OwnerId	Account__r.PersonBirthdate	Account__r.PersonContactId	Account__r.PhoneHLRStatus__pc	Account__r.PhoneNATStatus__pc	Account__r.RecordTypeId	Account__r.Salutation	Account__r.Type	CalculationToken__c	CarEngineCapacity__c	CarFuelType__c	CarMake__c	CarModel__c	CarYear__c	CpcPaid__c	CreatedBy.Alias	CreatedBy.CreatedDate	CreatedById	CreatedDate	Id	IsDeleted	Mpc__c	PolicyStartDate__c	ProductScope__c	Source__c	WentToPartner__c	dont_have_this_car__c	TelehubStatus__c","\t")[[1]]
-indices = sapply(preds, function(pred){which(colnames(ABH)==pred)})
-labelindex = which(colnames(ABH)=='Sale.success')
-ABHnoID = ABH[,c(unlist(indices),labelindex)]
+if (!require("caret")){
+  install.packages("caret")
+}
+library("caret")
+library(Matrix)
+if (!require('pROC')){
+  install.packages('pROC')
+}
+library('pROC')
+library(xgboost)
+library(caret)
+library(glmnet)
 
-colnames(ABHnoID)
+#zbior treningowy (ten co link do niego wygasl) zamieniony na csv-ke
+df = read.csv("data.csv", sep=',', header=TRUE)
+train = df[, c(1:71,which(colnames(df) %in% c('Sale.success', 'Contacted.by.CC')))]
+#usuwanie ID
+ids = which(grepl(".*id.*",colnames(train),ignore.case=T))
+tokenids = which(colnames(train) %in% c('calculation_token', "salesforce_lead"))
+ids = c(ids, tokenids)
+#zamiana integer -> factor
+train2 = train[,-ids]
+train2$etx_fuel_code = as.factor(train2$etx_fuel_code)
+train2$etx_model_code = as.factor(train2$etx_model_code)
+train2$protection_scope = as.factor(train2$protection_scope)
+train2$child_carriage_frequency = as.factor(train2$child_carriage_frequency)
+train2$used_abroad = as.factor(train2$used_abroad)
+train2$theft_protection_installation = as.factor(train2$theft_protection_installation)
+train2$theft_protection_device_1 = as.factor(train2$theft_protection_device_1)
+train2$theft_protection_device_2 = as.factor(train2$theft_protection_device_2)
+train2$is_damaged = as.factor(train2$is_damaged)
+train2$leasing = as.factor(train2$leasing)
+train2$calc_complete = as.factor(train2$calc_complete)
+train2$calc_finished = as.factor(train2$calc_finished)
+train2$phone_yes = as.integer(train2$phone_yes)
+train2$terms_acceptance = as.factor(train2$terms_acceptance)
+train2$step = as.factor(train2$step)
+train2$sent_to_sf = as.factor(train2$sent_to_sf)
+train2$phone_lookup_status = as.factor(train2$phone_lookup_status)
+train2$Sale.success = as.factor(train2$Sale.success)
+#poprawienie dat
+d0 <- as.Date(0, origin="1899-12-30", tz='UTC')
 
-ABHnoID$calculation_id=NULL
-ABHnoID$calculation_token=NULL
-ABHnoID$affiliation_id=NULL
-ABHnoID$sent_to_sf=NULL
-ABHnoID$Id = NULL
-ABHnoID$Status__c=NULL
-ABHnoID$StatusType__c=NULL
-ABHnoID$SystemModstamp=NULL
-ABHnoID$Last.call=NULL
-ABHnoID$LastCall__c=NULL
-ABHnoID$Account__r.CreatedDate = NULL
+train2$created_at = sapply(as.character(train2$created_at), function(rd){
+  if (is.na(rd) | nchar(rd)<5) {NA} else {
+    ssplit = strsplit(rd,' ')[[1]]
+    a = strsplit(ssplit[1],'-')[[1]]
+    aa = as.Date(paste0(which(month.abb==a[2]),'/',a[1],'/',a[3]),'%m/%d/%y')
+    numericdate = as.numeric(aa-d0)
+    b = strsplit(ssplit[2],':')[[1]]
+    dayseconds = 24*60*60
+    numerator = as.numeric(b[1])*3600+as.numeric(b[2])*60+as.numeric(b[3])
+    numericdate + (numerator/dayseconds)
+  }
+})
 
-ABHnoID$mileage = as.numeric(ABHnoID$mileage)
-ABHnoID$yearly_mileage = as.numeric(ABHnoID$yearly_mileage)
-ABHnoID$car_worth = as.numeric(ABHnoID$car_worth)
-ABHnoID$main_driver_age = as.integer(ABHnoID$main_driver_age)
-ABHnoID$oc_offers_qty = as.integer(ABHnoID$oc_offers_qty)
-ABHnoID$oc_offer_min_val = as.integer(ABHnoID$oc_offer_min_val)
-ABHnoID$ac_offers_qty = as.integer(ABHnoID$ac_offers_qty)
-ABHnoID$ac_offer_min_val = as.integer(ABHnoID$ac_offer_min_val)
-ABHnoID$offer_first_after = as.integer(ABHnoID$offer_first_after)
-ABHnoID$offer_last_after = as.integer(ABHnoID$offer_last_after)
-ABHnoID$contact_requests = as.integer(ABHnoID$contact_requests)
+train2$registration_date = sapply(as.character(train2$registration_date), function(rd){
+  if (nchar(rd)<5) {NA} else {
+    a = strsplit(strsplit(rd,' ')[[1]],'-')[[1]]
+    aa = as.Date(paste0(which(month.abb==a[2]),'/',a[1],'/',a[3]),'%m/%d/%y')
+    as.numeric(aa-d0)
+  }
+})
 
-ABHnoID$registration_date = as.numeric(ABHnoID$registration_date)
-ABHnoID$insurance_start_date = as.numeric(ABHnoID$insurance_start_date)
-ABHnoID$created_at = as.numeric(ABHnoID$created_at)
-ABHnoID$form_finished_at = as.numeric(ABHnoID$form_finished_at)
-ABHnoID$offer_first_at = as.numeric(ABHnoID$offer_first_at)
-ABHnoID$offer_last_at = as.numeric(ABHnoID$offer_last_at)
-ABHnoID$Account__r.PersonBirthdate = as.numeric(ABHnoID$Account__r.PersonBirthdate)
-ABHnoID$CreatedDate = as.numeric(ABHnoID$CreatedDate)
-ABHnoID$PolicyStartDate__c = as.numeric(ABHnoID$PolicyStartDate__c)
+train2$insurance_start_date = sapply(as.character(train2$insurance_start_date), function(rd){
+  if (nchar(rd)<5) {NA} else {
+    a = strsplit(strsplit(rd,' ')[[1]],'-')[[1]]
+    aa = as.Date(paste0(which(month.abb==a[2]),'/',a[1],'/',a[3]),'%m/%d/%y')
+    as.numeric(aa-d0)
+  }
+})
 
-#change chars to factors
-for (i in 1:length(ABHnoID)) {
-  if (is.character(ABHnoID[,i])){
-    ABHnoID[,i] = as.factor(ABHnoID[,i])
-    ABHnoID[,i] = addNA(ABHnoID[,i])
+train2$form_finished_at = sapply(as.character(train2$form_finished_at), function(rd){
+  if (is.na(rd) | nchar(rd)<5) {NA} else {
+    ssplit = strsplit(rd,' ')[[1]]
+    a = strsplit(ssplit[1],'-')[[1]]
+    aa = as.Date(paste0(which(month.abb==a[2]),'/',a[1],'/',a[3]),'%m/%d/%y')
+    numericdate = as.numeric(aa-d0)
+    b = strsplit(ssplit[2],':')[[1]]
+    dayseconds = 24*60*60
+    numerator = as.numeric(b[1])*3600+as.numeric(b[2])*60+as.numeric(b[3])
+    numericdate + (numerator/dayseconds)
+  }
+})
+
+train2$offer_first_at = sapply(as.character(train2$offer_first_at), function(rd){
+  if (is.na(rd) | nchar(rd)<5) {NA} else {
+    ssplit = strsplit(rd,' ')[[1]]
+    a = strsplit(ssplit[1],'-')[[1]]
+    aa = as.Date(paste0(which(month.abb==a[2]),'/',a[1],'/',a[3]),'%m/%d/%y')
+    numericdate = as.numeric(aa-d0)
+    b = strsplit(ssplit[2],':')[[1]]
+    dayseconds = 24*60*60
+    numerator = as.numeric(b[1])*3600+as.numeric(b[2])*60+as.numeric(b[3])
+    numericdate + (numerator/dayseconds)
+  }
+})
+
+train2$offer_last_at = sapply(as.character(train2$offer_last_at), function(rd){
+  if (is.na(rd) | nchar(rd)<5) {NA} else {
+    ssplit = strsplit(rd,' ')[[1]]
+    a = strsplit(ssplit[1],'-')[[1]]
+    aa = as.Date(paste0(which(month.abb==a[2]),'/',a[1],'/',a[3]),'%m/%d/%y')
+    numericdate = as.numeric(aa-d0)
+    b = strsplit(ssplit[2],':')[[1]]
+    dayseconds = 24*60*60
+    numerator = as.numeric(b[1])*3600+as.numeric(b[2])*60+as.numeric(b[3])
+    numericdate + (numerator/dayseconds)
+  }
+})
+
+train2 = train2[,-which(colnames(train2) == "created_at_date")]
+
+#zamiana character->factor
+#dodanie poziomu NA do factorow
+for (i in 1:length(train2)) {
+  if (is.character(train2[,i])){
+    train2[,i] = as.factor(train2[,i])
+  }
+  if (is.factor(train2[,i])){
+    train2[,i] = addNA(train2[,i])
   }
 }
 
-library(caret)
-nzv = nearZeroVar(ABHnoID)
-nzv
-train3 = ABHnoID[,-nzv]
+#usuwanie predyktorow z wariancja bliska 0
+nzv = nearZeroVar(train2,freqCut=99) #bardzo duży cutoff - 99/1 (by nie obcinać zbyt dużo)
+train3 = train2[,-nzv]
 
-
+#imputacja
 numericpreds = which(sapply(train3,class) %in% c('integer','numeric'))
 has_NA = sapply(numericpreds,function(npred)any(is.na(train3[,npred])))
 numericpreds = numericpreds[has_NA]
 for (numericpred in numericpreds){
+  is_na_col = is.na(train3[,numericpred])
   train3[which(is.na(train3[,numericpred])),numericpred] = as.integer(mean(na.omit(train3[,numericpred])))
+  train3 = data.frame(train3, is_na_col)
+  colnames(train3)[ncol(train3)] = paste0("was_na_", colnames(train3)[numericpred])
 }
-
 #korelacje
 correlated = c("phone_yes","phone_no","phone_acceptance")
 traininds = sapply(correlated,function(cc)which(colnames(train3)==cc))
-train4 = train3[,-28]
+train4 = train3[,-traininds]
 
 postalCodeToRegion = function (vector){
   vector = as.character(vector)
@@ -168,13 +241,6 @@ train4$night_parking_place_postal_code = postalCodeToRegion (train4$night_parkin
 train4$day_parking_place_postal_code = postalCodeToRegion (train4$day_parking_place_postal_code)
 train4$main_driver_postal_code = postalCodeToRegion (train4$main_driver_postal_code)
 
-numericpreds = which(sapply(train4,class) %in% c('integer','numeric'))
-has_NA = sapply(numericpreds,function(npred)any(is.na(train4[,npred])))
-numericpreds = numericpreds[has_NA]
-for (numericpred in numericpreds){
-  train4[which(is.na(train4[,numericpred])),numericpred] = as.integer(mean(na.omit(train4[,numericpred])))
-}
-
 ##
 ##INZYNIERIA CECH
 ##
@@ -182,20 +248,14 @@ for (numericpred in numericpreds){
 #na podstawie nowych danych, tylko te cechy mozna wprowadzic:
 train4$timeWaiting = (train4$offer_last_after)-(train4$offer_first_after)
 train4$formFillingTime = (train4$form_finished_at) - (train4$created_at)
+#imputacja formFillingTime
+train4[is.na(train4$formFillingTime),]$formFillingTime = mean(train4[!is.na(train4$formFillingTime),]$formFillingTime)
+#powyzsza wyrzuciu blad bo zaimputowano juz wartosci
 train4$hurryTime = (train4$insurance_start_date - train4$created_at)
 
 #usuniete przez nearzerovariance:
-train4$ac_offer_min_val = ABH$ac_offer_min_val
+train4$ac_offer_min_val = train2$ac_offer_min_val
 train4$ac_offer_min_val[is.na(train4$ac_offer_min_val)] = 0
-
-train4$oc_offer_min_val = ABH$oc_offer_min_val
-any(is.na(train4$ac_offers_qty))
-numericpreds = which(sapply(train4,class) %in% c('integer','numeric'))
-has_NA = sapply(numericpreds,function(npred)any(is.na(train4[,npred])))
-numericpreds = numericpreds[has_NA]
-for (numericpred in numericpreds){
-  train4[which(is.na(train4[,numericpred])),numericpred] = as.integer(mean(na.omit(train4[,numericpred])))
-}
 
 train4$ocacqty = train4$oc_offers_qty + train4$ac_offers_qty
 train4$ocacminval = train4$oc_offer_min_val + train4$ac_offer_min_val
@@ -205,6 +265,8 @@ train4$ocacratio[train4$ac_offer_min_val==0] = 0
 #day of week created_at
 train4$createdDoW = as.factor((as.integer(train4$created_at) + 6)%%7)
 
+#ramka ktora bedzie podstawa dla emptydf
+train_full = train4
 
 #usuniecie niektorych kolumn z datami z treningu (beda one bardzo szkodliwe dla modelu)
 train4$form_finished_at = NULL
@@ -215,16 +277,20 @@ train4$offer_first_at = NULL
 
 #czy nie ma NA w modelu?
 any(sapply(train4,function(cc)any(is.na(cc))))
-train4$Sale.success = ABH$Sale.success
+
 library(Matrix)
 md = sparse.model.matrix(Sale.success~.,train4)
+dim(md)
+
 library(xgboost)
-xgtrain = xgb.DMatrix(md,label=ABH$Sale.success)
+xgtrain = xgb.DMatrix(md,label=as.integer(as.character(train4$Sale.success)))
 
 modelxg = xgb.train(data=xgtrain,nrounds=100,objective="binary:logistic")
 
 xgi = xgb.importance(colnames(xgtrain),modelxg)
-head(xgi,20)
+
+head(xgi,100)
+head(xgi,100)
 #feature selection
 feats = head(xgi$Feature,50)
 
@@ -232,10 +298,12 @@ md2 = md[,feats]
   dim(md2)
 
 set.seed(997)
-sa = sample(1:93646,10000,replace=F)
+sa = sample(1:157827,10000,replace=F)
 md3 = md2[sa,]
 rfdata = as.matrix(md3)
-resp = as.factor(ABH$Sale.success)[sa]
+#usuniecie NA level z sale.success
+resp = as.factor(as.integer(as.character(train4$Sale.success)))[sa]
+mean(as.integer(resp))
 library(randomForest)
 modelrf = randomForest(rfdata,y=resp,ntree=150,proximity = T)
 #proximity
@@ -247,10 +315,69 @@ hc = hclust(d,method="complete")
 plot(hc)
 x = cutree(hc,h=0.98)
 unique(x)
-?cutree
-dim(md2)
-colnames(md2)
-hist(sapply(unique(x), function(xx){mean(md2[x==xx,3])}))
-plot(md2[,16],md2[,20],col=x)
-mean(md2[,13])
-mean(group2[,13])
+#4 klastry
+
+#uczenie klasyfikatora na klastrach:
+#dodanie etykiety Sale.success
+clust_data = as.data.frame(as.matrix(md3))
+clust_data$Sale.success = as.numeric(as.character(train4$Sale.success))[sa]
+#wymog xgboost - klasy musza byc 0,1,2,3 a nie 1,2,3,4
+xg_clust_data = xgb.DMatrix(as.matrix(clust_data),label=(x-1))
+xg_clust_model = xgb.train(data=xg_clust_data,nrounds=100,objective="multi:softmax",num_class=4)
+xgi_clust = xgb.importance(colnames(xg_clust_data),xg_clust_model)
+xgi_clust
+which(xgi_clust$Feature=='Sale.success')
+clust_data_label=clust_data
+clust_data_label$cluster = x
+#boxploty (z tego nic nie wynika)
+for (feat in head(xgi_clust$Feature,5)){
+  boxplot(formula=as.formula(paste0(feat,"~cluster")),data=clust_data_label)
+}
+library(dplyr)
+head(xgi_clust$Feature,30)
+#klaster 2 ma najwieksza szanse na sprzedaz
+clust_data_label %>% group_by(cluster) %>% summarise(meancol = mean(Sale.success))
+#klastry 3 i 4 maja najwieksze hurryTime (najdalej od okresu rozpoczecia ubezpieczenia)
+clust_data_label %>% group_by(cluster) %>% summarise(meancol = mean(hurryTime))
+#klaster 3 ma zdecydowanie najdluzsze formFillingTime, pozostale - bardzo szybko
+clust_data_label %>% group_by(cluster) %>% summarise(meancol = mean(formFillingTime))
+boxplot(formFillingTime~cluster,data=clust_data_label)
+#klaster 1 ma najwieksze wartosci samochodow i najwiekszy mileage
+clust_data_label %>% group_by(cluster) %>% summarise(meancol = mean(car_worth))
+clust_data_label %>% group_by(cluster) %>% summarise(meancol = mean(mileage))
+#klaster 2 to ludzie starsi srednio o rok niz klaster 4
+clust_data_label %>% group_by(cluster) %>% summarise(meancol = mean(main_driver_age))
+boxplot(main_driver_age~cluster,data=clust_data_label[clust_data_label$main_driver_age%in%18:100,])
+#klaster 1 i 4 to najdawniej zarejestrowane samochody
+clust_data_label %>% group_by(cluster) %>% summarise(meancol = mean(registration_date))
+#klaster 3 to zdecydowanie najdrozsze ubezpieczenia OC
+clust_data_label %>% group_by(cluster) %>% summarise(meancol = mean(oc_offer_min_val))
+#klaster 2 to ludzie ktorzy najdluzej czekali na ostatnia oferte
+clust_data_label %>% group_by(cluster) %>% summarise(meancol = mean(timeWaiting))
+#klaster 1 to najstarsze buy year, 4 to najnowsze
+clust_data_label %>% group_by(cluster) %>% summarise(meancol = mean(buy_year))
+#klaster 2 trzyma samochody najczesciej w garazu
+clust_data_label %>% group_by(cluster) %>% summarise(meancol = mean(night_parking_placeindividual_garage))
+#klaster 1 i 4 najregularniej korzysta z samochodow (malo istotne)
+clust_data_label %>% group_by(cluster) %>% summarise(meancol = mean(use_frequencyregularly))
+#klaster 4 to ludzie sprawdzajacy najmniej ofert, klaster 2/1 to ludzie najczesciej
+clust_data_label %>% group_by(cluster) %>% summarise(meancol = mean(went_to_partners))
+
+prop.table(table(clust_data_label$went_to_partners,clust_data_label$cluster),2)
+summary(as.factor(clust_data_label$cluster))
+#klaster 3 - "mysliciele" - ludzie dlugo sie zastanawiaja, pewnie bo maja drogie ubezpieczenia OC, choc tansze samochody. 
+#najmniej im sie spieszy. srednia liczba. przewaznie mlodsi
+#klaster 1 - najwieksza grupa klientow. przewaznie starsze samochody, sprawdzaja w miare duzo ofert (went_to_partners).
+#klaster 2 - srednia liczba klientow. najwieksza szansa na sprzedaz. trzymaja samochod najczesciej w garazu.
+#klaster 4 - najmniejszy klaster. ludzie sprawdzajacy najmniej ofert, nie spieszy im sie, najmlodsi
+
+
+t.test(clust_data_label$formFillingTime[clust_data_label$cluster==1],clust_data_label$formFillingTime[clust_data_label$cluster==3])
+
+sapply(clust_data_label,function(cc){
+  a1 = cc[clust_data_label$cluster==1]
+  a2 = cc[clust_data_label$cluster==2]
+  a3 = cc[clust_data_label$cluster==3]
+  a4 = cc[clust_data_label$cluster==4]
+  min(c(a1,a2,a3,a4))/max(c(a1,a2,a3,a4))
+})
